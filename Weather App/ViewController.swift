@@ -8,59 +8,59 @@
 
 import UIKit
 
-class ViewController: UIViewController {
+final class MainViewController: UIViewController {
     
-    private let button : UIButton = {
-        let button = UIButton()
-        button.backgroundColor = .blue
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.setTitle("Detect location", for: .normal)
-        button.addTarget(self, action: #selector(showLocation), for: .touchUpInside)
-        
-        return button
+    private let detectButton: UIButton = {
+        let detectButton = UIButton()
+        detectButton.backgroundColor = .blue
+        detectButton.translatesAutoresizingMaskIntoConstraints = false
+        detectButton.setTitle("Detect location", for: .normal)
+        detectButton.addTarget(self, action: #selector(showLocation), for: .touchUpInside)
+        return detectButton
     }()
     
-    private let location : UILabel = {
+    private let locationLabel: UILabel = {
         let location = UILabel()
         location.translatesAutoresizingMaskIntoConstraints = false
-        location.text = ""
-        location.textColor = .black
         return location
     }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.addSubview(button)
-        view.addSubview(location)
-        addConstraints()
-        
-    }
-
-    private func addConstraints() {
-        var constraints = [NSLayoutConstraint]()
-        constraints.append(button.widthAnchor.constraint(equalTo: view.widthAnchor,
-                                                         multiplier: 0.5))
-        constraints.append(button.heightAnchor.constraint(equalTo: view.heightAnchor,
-                                                          multiplier: 0.08))
-        constraints.append(button.centerXAnchor.constraint(equalTo: view.centerXAnchor))
-        constraints.append(button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100))
-        
-        constraints.append(location.centerXAnchor.constraint(equalTo: view.centerXAnchor))
-        constraints.append(location.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50))
-        
-        NSLayoutConstraint.activate(constraints)
+        arrangeSubviews()
+        setupViewConstraints()
     }
     
     @objc func showLocation() {
-        if (location.text == "") {
-            location.text = "Minsk, Belarus"
-            button.setTitle("Hide location", for: .normal)
+        if locationLabel.text == "" {
+            locationLabel.text = "Minsk, Belarus"
+            detectButton.setTitle("Hide location", for: .normal)
         }
         else {
-            location.text = ""
-            button.setTitle("Show location", for: .normal)
+            locationLabel.text = ""
+            detectButton.setTitle("Show location", for: .normal)
         }
     }
 
+}
+
+private extension MainViewController {
+    func arrangeSubviews() {
+        view.addSubview(detectButton)
+        view.addSubview(locationLabel)
+    }
+    
+    func setupViewConstraints() {
+        var constraints: [NSLayoutConstraint] = []
+        constraints += [
+            detectButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
+            detectButton.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.08),
+            detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
+            detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50)
+        ]
+        NSLayoutConstraint.activate(constraints)
+    }
 }
 
