@@ -7,8 +7,13 @@
 //
 
 import UIKit
+import CoreLocation
 
 final class MainViewController: UIViewController {
+    
+    private var locationManager: CLLocationManager? = CLLocationManager()
+    private var userLocation: CLLocation? = CLLocation()
+    
     
     private let detectButton: UIButton = {
         let detectButton = UIButton()
@@ -19,32 +24,40 @@ final class MainViewController: UIViewController {
         return detectButton
     }()
     
-    private let locationLabel: UILabel = {
-        let location = UILabel()
-        location.translatesAutoresizingMaskIntoConstraints = false
-        return location
+    private var locationLabel: UILabel = {
+        var locationLabel = UILabel()
+        locationLabel.translatesAutoresizingMaskIntoConstraints = false
+        return locationLabel
     }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
         arrangeSubviews()
         setupViewConstraints()
+        locationManager?.delegate = self
+    }
+    
+    func requestUserLocation() {
+        if CLLocationManager.authorizationStatus() == .authorizedWhenInUse {
+            locationManager?.startUpdatingLocation()
+        } else {
+            locationManager?.requestWhenInUseAuthorization()
+        }
     }
     
     @objc func showLocation() {
-        if locationLabel.text == "" {
-            locationLabel.text = "Minsk, Belarus"
-            detectButton.setTitle("Hide location", for: .normal)
-        }
-        else {
-            locationLabel.text = ""
-            detectButton.setTitle("Show location", for: .normal)
-        }
+        requestUserLocation()
     }
 
 }
 
 private extension MainViewController {
+    
     func arrangeSubviews() {
         view.addSubview(detectButton)
         view.addSubview(locationLabel)
@@ -57,10 +70,23 @@ private extension MainViewController {
             detectButton.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.08),
             detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
-            detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50)
+            locationLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            locationLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50)
         ]
         NSLayoutConstraint.activate(constraints)
+    }
+}
+
+extension MainViewController: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse {
+            manager.startUpdatingLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        userLocation = locations.last
+        manager.stopUpdatingLocation()
     }
 }
 
