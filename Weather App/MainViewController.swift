@@ -11,49 +11,59 @@ import CoreLocation
 
 final class MainViewController: UIViewController {
     
-    private var locationManager: CLLocationManager? = CLLocationManager()
-    private var userLocation: CLLocation? = CLLocation()
+    private var locationManager = CLLocationManager()
+    private var userLocation: CLLocation?
+    private var isUpdatingLocation = false
+    private var lastLocationError: Error?
     
+    private var placemark: CLPlacemark?
+    private let geocoder = CLGeocoder()
+    private var isPerfomingReverseGeocoding = false
+    private var lastGeocodingError: Error?
+    
+    private var activityIndicatorView: UIActivityIndicatorView = UIActivityIndicatorView()
     
     private let detectButton: UIButton = {
-        let detectButton = UIButton()
-        detectButton.backgroundColor = .blue
-        detectButton.translatesAutoresizingMaskIntoConstraints = false
-        detectButton.setTitle("Detect location", for: .normal)
-        detectButton.addTarget(self, action: #selector(showLocation), for: .touchUpInside)
-        return detectButton
+        let button = UIButton()
+        button.backgroundColor = .blue
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle("Detect location", for: .normal)
+        button.addTarget(self, action: #selector(showLocation), for: .touchUpInside)
+        return button
     }()
     
     private var locationLabel: UILabel = {
-        var locationLabel = UILabel()
-        locationLabel.translatesAutoresizingMaskIntoConstraints = false
-        return locationLabel
+        var label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 2
+        label.text = "HELLO"
+        return label
     }()
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        
-    }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        
+        activityIndicatorView.hidesWhenStopped = true
+        activityIndicatorView.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicatorView.color = #colorLiteral(red: 0.2549019754, green: 0.2745098174, blue: 0.3019607961, alpha: 1)
+        
         arrangeSubviews()
         setupViewConstraints()
-        locationManager?.delegate = self
-    }
-    
-    func requestUserLocation() {
-        if CLLocationManager.authorizationStatus() == .authorizedWhenInUse {
-            locationManager?.startUpdatingLocation()
-        } else {
-            locationManager?.requestWhenInUseAuthorization()
-        }
     }
     
     @objc func showLocation() {
+        DispatchQueue.main.async {
+            self.locationLabel.text = ""
+            self.activityIndicatorView.startAnimating()
+        }
         requestUserLocation()
+        DispatchQueue.main.async {
+            if self.placemark != nil {
+                self.locationLabel.text = self.placemark?.locality!
+            }
+            self.activityIndicatorView.stopAnimating()
+        }
     }
-
 }
 
 private extension MainViewController {
@@ -61,6 +71,7 @@ private extension MainViewController {
     func arrangeSubviews() {
         view.addSubview(detectButton)
         view.addSubview(locationLabel)
+        view.addSubview(activityIndicatorView)
     }
     
     func setupViewConstraints() {
@@ -71,22 +82,86 @@ private extension MainViewController {
             detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
             locationLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            locationLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50)
+            locationLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
+            activityIndicatorView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicatorView.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40)
         ]
         NSLayoutConstraint.activate(constraints)
     }
 }
 
 extension MainViewController: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        if status == .authorizedWhenInUse {
-            manager.startUpdatingLocation()
+    func startLocationManager() {
+        if CLLocationManager.locationServicesEnabled() {
+            locationManager.delegate = self
+            locationManager.startUpdatingLocation()
+            isUpdatingLocation = true
         }
+    }
+    
+    func stopLocationManager() {
+        if isUpdatingLocation {
+            locationManager.stopUpdatingLocation()
+            locationManager.delegate = nil
+            isUpdatingLocation = false
+        }
+    }
+    
+    func reportLocationServiceDeniedError() {
+        let alert = UIAlertController(title: "Location services disabled", message: "Please, go to Settings > Privacy to enable location services for this app", preferredStyle: .alert)
+        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+        alert.addAction(okAction)
+        
+        present(alert, animated: true, completion: nil)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Location manager did fail with error: \(error)")
+        if (error as NSError).code == CLError.locationUnknown.rawValue {
+            return
+        }
+        lastLocationError = error
+        stopLocationManager()
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last
-        manager.stopUpdatingLocation()
+        userLocation = locations.last!
+        stopLocationManager()
+        
+        guard let location = self.userLocation else { return }
+        if !isPerfomingReverseGeocoding {
+            isPerfomingReverseGeocoding = true
+            geocoder.reverseGeocodeLocation(location) { (placemarks, error) in
+                self.lastGeocodingError = error
+                if error == nil, let placemarks = placemarks, !placemarks.isEmpty {
+                    self.placemark = placemarks.last!
+                } else {
+                    self.placemark = nil
+                }
+                self.isPerfomingReverseGeocoding = false
+            }
+        }
+    }
+    
+    func requestUserLocation() {
+        let authorizationStatus = CLLocationManager.authorizationStatus()
+        if authorizationStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+            return
+        }
+        
+        if authorizationStatus == .denied || authorizationStatus == .restricted {
+            reportLocationServiceDeniedError()
+            return
+        }
+        
+        if isUpdatingLocation {
+            stopLocationManager()
+        } else {
+            userLocation = nil
+            lastLocationError = nil
+            startLocationManager()
+        }
     }
 }
 
