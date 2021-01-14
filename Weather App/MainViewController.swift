@@ -1,27 +1,29 @@
-//
-//  ViewController.swift
-//  Weather App
-//
-//  Created by Марк Курлович on 11/8/20.
-//  Copyright © 2020 Mark Kurlovich. All rights reserved.
-//
-
+import Foundation
 import UIKit
 import CoreLocation
 
 final class MainViewController: UIViewController {
     
-    private var locationManager = CLLocationManager()
+    private var weatherViewController: WeatherViewController = WeatherViewController()
+    private let locationManager: CLLocationManager = {
+        let locationManager = CLLocationManager()
+        locationManager.pausesLocationUpdatesAutomatically = true
+        return locationManager
+    }()
     private var userLocation: CLLocation?
-    private var isUpdatingLocation = false
     private var lastLocationError: Error?
     
     private var placemark: CLPlacemark?
     private let geocoder = CLGeocoder()
-    private var isPerfomingReverseGeocoding = false
     private var lastGeocodingError: Error?
     
-    private var activityIndicatorView: UIActivityIndicatorView = UIActivityIndicatorView()
+    private var activityIndicatorView: UIActivityIndicatorView = {
+        let activityIndicator = UIActivityIndicatorView()
+        activityIndicator.hidesWhenStopped = true
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicator.color = #colorLiteral(red: 0.2549019754, green: 0.2745098174, blue: 0.3019607961, alpha: 1)
+        return activityIndicator
+    }()
     
     private let detectButton: UIButton = {
         let button = UIButton()
@@ -32,37 +34,45 @@ final class MainViewController: UIViewController {
         return button
     }()
     
+    private let showWeatherButton: UIButton = {
+        let button = UIButton()
+        button.backgroundColor = .red
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle("Show weather", for: .normal)
+        button.addTarget(self, action: #selector(showWeather), for: .touchUpInside)
+        button.isHidden = true
+        return button
+    }()
+    
     private var locationLabel: UILabel = {
         var label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.numberOfLines = 2
-        label.text = "HELLO"
         return label
     }()
     
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        
-        activityIndicatorView.hidesWhenStopped = true
-        activityIndicatorView.translatesAutoresizingMaskIntoConstraints = false
-        activityIndicatorView.color = #colorLiteral(red: 0.2549019754, green: 0.2745098174, blue: 0.3019607961, alpha: 1)
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        navigationItem.title = "Weather App"
+        view.backgroundColor = .white
         
         arrangeSubviews()
         setupViewConstraints()
+        locationManager.delegate = self
+        
+        locationManager.startUpdatingLocation()
     }
     
     @objc func showLocation() {
-        DispatchQueue.main.async {
-            self.locationLabel.text = ""
-            self.activityIndicatorView.startAnimating()
-        }
+        locationLabel.text = ""
+        activityIndicatorView.startAnimating()
         requestUserLocation()
-        DispatchQueue.main.async {
-            if self.placemark != nil {
-                self.locationLabel.text = self.placemark?.locality!
-            }
-            self.activityIndicatorView.stopAnimating()
-        }
+    }
+    
+    @objc func showWeather() {
+        locationLabel.text = placemark?.locality!
+        weatherViewController.city = (placemark?.locality)!
+        navigationController?.pushViewController(weatherViewController, animated: true)
     }
 }
 
@@ -70,6 +80,7 @@ private extension MainViewController {
     
     func arrangeSubviews() {
         view.addSubview(detectButton)
+        view.addSubview(showWeatherButton)
         view.addSubview(locationLabel)
         view.addSubview(activityIndicatorView)
     }
@@ -81,6 +92,10 @@ private extension MainViewController {
             detectButton.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.08),
             detectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             detectButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
+            showWeatherButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
+            showWeatherButton.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.08),
+            showWeatherButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            showWeatherButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -50),
             locationLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             locationLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
             activityIndicatorView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -91,20 +106,32 @@ private extension MainViewController {
 }
 
 extension MainViewController: CLLocationManagerDelegate {
-    func startLocationManager() {
-        if CLLocationManager.locationServicesEnabled() {
-            locationManager.delegate = self
-            locationManager.startUpdatingLocation()
-            isUpdatingLocation = true
+    func requestUserLocation() {
+        locationManager.requestAlwaysAuthorization()
+        let delay = DispatchTime.now() + .seconds(1)
+        DispatchQueue.main.asyncAfter(deadline: delay) {
+            if self.placemark != nil {
+                self.locationLabel.text = self.placemark?.locality!
+                self.showWeatherButton.isHidden = false
+            } else {
+                self.locationLabel.text = "Error"
+                self.showWeatherButton.isHidden = true
+            }
+            self.activityIndicatorView.stopAnimating()
         }
     }
     
-    func stopLocationManager() {
-        if isUpdatingLocation {
-            locationManager.stopUpdatingLocation()
-            locationManager.delegate = nil
-            isUpdatingLocation = false
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .denied || status == .restricted {
+            print("No access!")
         }
+        if status == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        }
+        if status == .authorizedWhenInUse {
+            locationManager.requestAlwaysAuthorization()
+        }
+        activityIndicatorView.stopAnimating()
     }
     
     func reportLocationServiceDeniedError() {
@@ -121,47 +148,18 @@ extension MainViewController: CLLocationManagerDelegate {
             return
         }
         lastLocationError = error
-        stopLocationManager()
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last!
-        stopLocationManager()
-        
-        guard let location = self.userLocation else { return }
-        if !isPerfomingReverseGeocoding {
-            isPerfomingReverseGeocoding = true
-            geocoder.reverseGeocodeLocation(location) { (placemarks, error) in
-                self.lastGeocodingError = error
-                if error == nil, let placemarks = placemarks, !placemarks.isEmpty {
-                    self.placemark = placemarks.last!
-                } else {
-                    self.placemark = nil
-                }
-                self.isPerfomingReverseGeocoding = false
-            }
-        }
     }
     
-    func requestUserLocation() {
-        let authorizationStatus = CLLocationManager.authorizationStatus()
-        if authorizationStatus == .notDetermined {
-            locationManager.requestWhenInUseAuthorization()
-            return
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        userLocation = locations.last!
+        guard let location = userLocation else { return }
+        geocoder.reverseGeocodeLocation(location) { (placemarks, error) in
+            self.lastGeocodingError = error
+            if error == nil, let placemarks = placemarks, !placemarks.isEmpty {
+                self.placemark = placemarks.last!
+            }
         }
-        
-        if authorizationStatus == .denied || authorizationStatus == .restricted {
-            reportLocationServiceDeniedError()
-            return
-        }
-        
-        if isUpdatingLocation {
-            stopLocationManager()
-        } else {
-            userLocation = nil
-            lastLocationError = nil
-            startLocationManager()
-        }
+        activityIndicatorView.stopAnimating()
     }
 }
 
